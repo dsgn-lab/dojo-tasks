@@ -1,11 +1,16 @@
 addEventListener('fetch', event => {
-  event.respondWith(handleRequest(event.request));
+  event.respondWith(handleRequest(event));
 });
 
-async function handleRequest(request) {
-  const DISCORD_PUBLIC_KEY = globalThis.c101498f92c7864001f56650a3fdf5921174f5d83cfc338851b200cfe809f414;
-  const CLICKUP_API_TOKEN  = globalThis.pk_270854689_92TRB3RV1TYN1E663F1KXZSTI61AVMIH;
-  const CLICKUP_LIST_ID    = globalThis.901605328722;
+async function handleRequest(event) {
+  const env = event.env;
+
+  // Retrieve environment variables securely
+  const DISCORD_PUBLIC_KEY = env.DISCORD_PUBLIC_KEY;
+  const CLICKUP_API_TOKEN  = env.CLICKUP_API_TOKEN;
+  const CLICKUP_LIST_ID    = env.CLICKUP_LIST_ID;
+
+  const request = event.request;
 
   if (request.method === 'POST') {
     const signature = request.headers.get('X-Signature-Ed25519');
@@ -15,6 +20,7 @@ async function handleRequest(request) {
     // Validate the request signature from Discord
     const isValid = await verifyDiscordRequest(body, signature, timestamp, DISCORD_PUBLIC_KEY);
     if (!isValid) {
+      console.warn("Invalid request signature detected.");
       return new Response('Invalid request signature', { status: 401 });
     }
 
@@ -32,10 +38,13 @@ async function handleRequest(request) {
       const taskname = jsonBody.data.options[0].value;
       const taskdesc = jsonBody.data.options[1].value;
 
+      console.log(`Received task request: ${taskname}`);
+
       // Create the task in ClickUp
-      const taskCreated = await createClickUpTask(taskname, taskdesc, CLICKUP_API_TOKEN, CLICKUP_LIST_ID);
+      const taskCreated = await createClickUpTask(taskname, taskdesc, CLICKUP_API_TOKEN, CLICKUP_LIST_ID, env);
 
       if (taskCreated) {
+        console.log(`Task "${taskname}" created successfully.`);
         return new Response(
           JSON.stringify({
             type: 4, // Respond with a message only visible to the user
@@ -44,6 +53,7 @@ async function handleRequest(request) {
           { headers: { 'Content-Type': 'application/json' } }
         );
       } else {
+        console.warn(`Failed to create task: ${taskname}`);
         return new Response(
           JSON.stringify({
             type: 4,
@@ -59,15 +69,17 @@ async function handleRequest(request) {
 }
 
 // Function to create a task in ClickUp
-async function createClickUpTask(taskname, taskdesc, apiToken, listId) {
-  const CLICKUP_LIST_ID = globalThis.CLICKUP_ASSIGNEE;
-  const url             = `https://api.clickup.com/api/v2/list/${listId}/task`;
+async function createClickUpTask(taskname, taskdesc, apiToken, listId, env) {
+  const CLICKUP_ASSIGNEE = env.CLICKUP_ASSIGNEE; // Securely fetch assignee from environment
+  const url = `https://api.clickup.com/api/v2/list/${listId}/task`;
 
   const data = {
     name: taskname,
     description: taskdesc,
-    assignees: [CLICKUP_LIST_ID],
+    assignees: [CLICKUP_ASSIGNEE], // Corrected reference
   };
+
+  console.log(`Creating ClickUp task: ${taskname}`);
 
   const response = await fetch(url, {
     method: 'POST',
@@ -80,9 +92,10 @@ async function createClickUpTask(taskname, taskdesc, apiToken, listId) {
 
   if (response.ok) {
     const responseData = await response.json();
-    return responseData.url; // Return task URL or any confirmation that the task was created
+    return responseData.url; // Return task URL or confirmation of creation
   }
 
+  console.error(`ClickUp API request failed with status: ${response.status}`);
   return false;
 }
 
@@ -93,15 +106,20 @@ async function verifyDiscordRequest(body, signature, timestamp, publicKey) {
   
   const signatureArray = hexToUint8Array(signature);
 
-  const key = await crypto.subtle.importKey(
-    'raw',
-    hexToUint8Array(publicKey),
-    { name: 'NODE-ED25519', namedCurve: 'NODE-ED25519', public: true },
-    true,
-    ['verify']
-  );
+  try {
+    const key = await crypto.subtle.importKey(
+      'raw',
+      hexToUint8Array(publicKey),
+      { name: 'Ed25519', public: true }, // Fixed incorrect key algorithm
+      true,
+      ['verify']
+    );
 
-  return crypto.subtle.verify('NODE-ED25519', key, signatureArray, data);
+    return crypto.subtle.verify('Ed25519', key, signatureArray, data);
+  } catch (error) {
+    console.error("Signature verification failed:", error);
+    return false;
+  }
 }
 
 // Helper function to convert hex to Uint8Array
