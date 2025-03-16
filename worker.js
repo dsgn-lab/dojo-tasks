@@ -3,9 +3,9 @@ addEventListener('fetch', event => {
 });
 
 async function handleRequest(request) {
-  const DISCORD_PUBLIC_KEY = globalThis.DISCORD_PUBLIC_KEY;
-  const CLICKUP_API_TOKEN  = globalThis.CLICKUP_API_TOKEN;
-  const CLICKUP_LIST_ID    = globalThis.CLICKUP_LIST_ID;
+  const DISCORD_PUBLIC_KEY = globalThis.c101498f92c7864001f56650a3fdf5921174f5d83cfc338851b200cfe809f414;
+  const CLICKUP_API_TOKEN  = globalThis.pk_270854689_92TRB3RV1TYN1E663F1KXZSTI61AVMIH;
+  const CLICKUP_LIST_ID    = globalThis.901605328722;
 
   if (request.method === 'POST') {
     const signature = request.headers.get('X-Signature-Ed25519');
